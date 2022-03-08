@@ -322,17 +322,17 @@ def main(args):
     mixup_active = args.mixup > 0 or args.cutmix > 0. or args.cutmix_minmax is not None
 
     model = factory.get_backbone(args)
-
     model.head = Classifier(
         model.embed_dim, args.nb_classes, args.initial_increment,
         args.increment, len(scenario_train)
     )
-
     model.to(device)
-
+    # model will be on multiple GPUs, while model_without_ddp on a single GPU, but
+    # it's actually the same model.
     model_without_ddp = model
     n_parameters = sum(p.numel() for p in model_without_ddp.parameters() if p.requires_grad)
 
+    # Start the logging process on disk ----------------------------------------
     if args.name:
         log_path = os.path.join(args.log_dir, f"logs_{args.trial_id}.json")
         long_log_path = os.path.join(args.log_dir, f"long_logs_{args.trial_id}.json")
@@ -354,7 +354,6 @@ def main(args):
     else:
         log_store = None
         log_path = long_log_path = None
-
     if args.output_dir and utils.is_main_process():
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
@@ -387,7 +386,6 @@ def main(args):
 
     nb_classes = args.initial_increment
     base_lr = args.lr
-    warmup_epochs = args.warmup_epochs
     accuracy_list = []
     start_time = time.time()
 
@@ -515,6 +513,7 @@ def main(args):
         model_without_ddp.nb_epochs = epochs
         model_without_ddp.nb_batch_per_epoch = len(loader_train)
 
+        # Init SAM, for DyTox++ (see appendix) ---------------------------------
         sam = None
         if args.sam_rho > 0. and 'tr' in args.sam_mode and ((task_id > 0 and args.sam_skip_first) or not args.sam_skip_first):
             if args.sam_final is not None:
@@ -530,6 +529,7 @@ def main(args):
                 div=args.sam_div,
                 use_look_sam=args.look_sam_k > 0, look_sam_alpha=args.look_sam_alpha
             )
+        # ----------------------------------------------------------------------
 
         print(f"Start training for {epochs-initial_epoch} epochs")
         max_accuracy = 0.0
@@ -599,6 +599,8 @@ def main(args):
         # ----------------------------------------------------------------------
         # FINETUNING
         # ----------------------------------------------------------------------
+
+        # Init SAM, for DyTox++ (see appendix) ---------------------------------
         sam = None
         if args.sam_rho > 0. and 'ft' in args.sam_mode and ((task_id > 0 and args.sam_skip_first) or not args.sam_skip_first):
             if args.sam_final is not None:
@@ -614,6 +616,7 @@ def main(args):
                 div=args.sam_div,
                 use_look_sam=args.look_sam_k > 0, look_sam_alpha=args.look_sam_alpha
             )
+        # ----------------------------------------------------------------------
 
         if args.finetuning and memory and (task_id > 0 or scenario_train.nb_classes == args.initial_increment) and not skipped_task:
             dataset_finetune = get_finetuning_dataset(dataset_train, memory, args.finetuning)
@@ -700,7 +703,7 @@ def load_options(args, options):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('DeiT training and evaluation script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('DyTox training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     utils.init_distributed_mode(args)
 

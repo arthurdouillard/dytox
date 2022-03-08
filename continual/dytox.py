@@ -8,6 +8,7 @@ import continual.utils as cutils
 
 
 class ContinualClassifier(nn.Module):
+    """Your good old classifier to do continual."""
     def __init__(self, embed_dim, nb_classes):
         super().__init__()
 
@@ -34,6 +35,15 @@ class ContinualClassifier(nn.Module):
 
 
 class DyTox(nn.Module):
+    """"DyTox for the win!
+
+    :param transformer: The base transformer.
+    :param nb_classes: Thhe initial number of classes.
+    :param individual_classifier: Classifier config, DyTox is in `1-1`.
+    :param head_div: Whether to use the divergence head for improved diversity.
+    :param head_div_mode: Use the divergence head in TRaining, FineTuning, or both.
+    :param joint_tokens: Use a single TAB forward with masked attention (faster but a bit worse).
+    """
     def __init__(
         self,
         transformer,
@@ -75,7 +85,6 @@ class DyTox(nn.Module):
                 self.embed_dim * len(self.task_tokens), sum(self.nb_classes_per_task)
             ).cuda()
 
-
     def end_finetuning(self):
         self.in_finetuning = False
 
@@ -83,6 +92,7 @@ class DyTox(nn.Module):
         self.in_finetuning = True
 
     def add_model(self, nb_new_classes):
+        """Expand model as per the DyTox framework given `nb_new_classes`."""
         self.nb_classes_per_task.append(nb_new_classes)
 
         # Class tokens ---------------------------------------------------------
@@ -111,6 +121,10 @@ class DyTox(nn.Module):
         # ----------------------------------------------------------------------
 
     def _get_ind_clf_dim(self):
+        """What are the input and output dim of classifier depending on its config.
+
+        By default, DyTox is in 1-1.
+        """
         if self.individual_classifier == '1-1':
             in_dim = self.embed_dim
             out_dim = self.nb_classes_per_task[-1]
@@ -128,6 +142,7 @@ class DyTox(nn.Module):
         return in_dim, out_dim
 
     def freeze(self, names):
+        """Choose what to freeze depending on the name of the module."""
         requires_grad = False
         cutils.freeze_parameters(self, requires_grad=not requires_grad)
         self.train()
@@ -263,6 +278,12 @@ class DyTox(nn.Module):
         return tokens, tokens[-1], attentions
 
     def forward_features_jointtokens(self, x):
+        """Method to do a single TAB forward with all task tokens.
+
+        A masking is used to avoid interaction between tasks. In theory it should
+        give the same results as multiple TAB forward, but in practice it's a little
+        bit worse, not sure why. So if you have an idea, please tell me!
+        """
         B = len(x)
 
         task_tokens = torch.cat(
@@ -282,6 +303,20 @@ class DyTox(nn.Module):
         return task_tokens.view(B, -1), task_tokens[:, -1], None
 
     def forward_classifier(self, tokens, last_token):
+        """Once all task embeddings e_1, ..., e_t are extracted, classify.
+
+        Classifier has different mode based on a pattern x-y:
+        - x means the number of task embeddings in input
+        - y means the number of task to predict
+
+        So:
+        - n-n: predicts all task given all embeddings
+        But:
+        - 1-1: predict 1 task given 1 embedding, which is the 'independent classifier' used in the paper.
+
+        :param tokens: A list of all task tokens embeddings.
+        :param last_token: The ultimate task token embedding from the latest task.
+        """
         logits_div = None
 
         if self.individual_classifier != '':
