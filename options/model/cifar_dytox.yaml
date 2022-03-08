@@ -1,0 +1,57 @@
+#######################
+# DyTox, for CIFAR100 #
+#######################
+
+# Model definition
+model: convit
+embed_dim: 384
+depth: 6
+num_heads: 12
+patch_size: 4
+input_size: 32
+local_up_to_layer: 5
+class_attention: true
+
+# Training setting
+no_amp: true
+eval_every: 50
+
+# Base hyperparameter
+weight_decay: 0.000001
+batch_size: 128
+incremental_batch_size: 128
+incremental_lr: 0.0005
+rehearsal: icarl_all
+
+# Knowledge Distillation
+auto_kd: true
+
+# Finetuning
+finetuning: balanced
+finetuning_epochs: 20
+
+# Dytox model
+dytox: true
+freeze_task: [old_task_tokens, old_heads]
+freeze_ft: [sab]
+
+# Divergence head to get diversity
+head_div: 0.1
+head_div_mode: tr
+
+# Independent Classifiers
+ind_clf: 1-1
+bce_loss: true
+
+
+# Advanced Augmentations, here disabled
+
+## Erasing
+reprob: 0.0
+remode: pixel
+recount: 1
+resplit: false
+
+## MixUp & CutMix
+mixup: 0.0
+cutmix: 0.0

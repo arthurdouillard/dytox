@@ -1,0 +1,6 @@
+data_set: imagenet1000
+initial_increment: 100
+increment: 100
+memory_size: 20000
+
+log_category: 100-100

@@ -1,0 +1,6 @@
+data_set: CIFAR
+initial_increment: 5
+increment: 5
+memory_size: 2000
+
+log_category: 5-5

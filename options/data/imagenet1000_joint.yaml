@@ -1,0 +1,5 @@
+data_set: imagenet1000
+initial_increment: 1000
+increment: 1000
+
+log_category: joint
