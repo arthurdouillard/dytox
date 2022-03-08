@@ -1,0 +1,7 @@
+*.swp
+**/__pycache__/**
+checkpoints/
+logs/
+.vscode
+.ipynb_checkpoints
+
