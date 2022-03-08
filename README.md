@@ -12,6 +12,9 @@
 
 Welcome to DyTox, the first transformer designed explicitly for Continual Learning!
 
+Work lead by [Arthur Douillard](https://arthurdouillard.com/) and co-authored with [Alexandre Ramé](https://alexrame.github.io/),
+[Guillaume Couairon](https://phazcode.gitlab.io/about/), and [Matthieu Cord](http://webia.lip6.fr/~cord/).
+
 
 # Installation
 
