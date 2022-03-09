@@ -1,18 +1,20 @@
 <div align="center">
 
-# DyTox: Transformers for Continual Learning with DYnamic TOken eXpansion
+# DyTox
+
+## Transformers for Continual Learning with DYnamic TOken eXpansion
 
 [![Paper](https://img.shields.io/badge/arXiv-2004.13513-brightgreen)](https://arxiv.org/abs/2111.11326)
 ![CVPR](https://img.shields.io/badge/CVPR-2022-blue)
 
-</div>
 
 ![DyTox main figure](images/dytox.png)
 
-
 Welcome to DyTox, the first transformer designed explicitly for Continual Learning!
+</div>
 
-Work lead by [Arthur Douillard](https://arthurdouillard.com/) and co-authored with [Alexandre Ramé](https://alexrame.github.io/),
+
+Work led by [Arthur Douillard](https://arthurdouillard.com/) and co-authored with [Alexandre Ramé](https://alexrame.github.io/),
 [Guillaume Couairon](https://phazcode.gitlab.io/about/), and [Matthieu Cord](http://webia.lip6.fr/~cord/).
 
 
@@ -75,6 +77,45 @@ bash train.sh 0,1 \
     --resume MY_PATH_TO_CKPT_FOLDER_OF_EXP \
     --start-task TASK_ID_STARTING_FROM_0_OF_WHEN_THE_EXP_HAD_STOPPED
 ```
+
+# Results
+
+## ImageNet
+
+![ImageNet figure results](images/imagenet1000.png)
+![ImageNet table results](images/imagenet_table.png)
+
+## CIFAR100
+
+![CIFAR figure results](images/cifar.png)
+![CIFAR table results](images/cifar_table.png)
+
+# Frequenly Asked Questions
+
+> Is DyTox pretrained?
+
+- No! It's trained from scratch for fair comparison with previous SotAs
+
+> Your encoder is made actually of ConVit blocks, can I use something else? Like a MHSA or Swin?
+
+- Yes! I've used ConVit blocks because they trained well from scratch on small datasets like CIFAR
+
+> Can I add a new datasets?
+
+- Yes! You can add any datasets in [continual/datasets.py](https://github.com/arthurdouillard/dytox/blob/main/continual/datasets.py). They just need to be compatible with the [Continuum](https://github.com/Continvvm/continuum) library. But check it out, they have a lot of [implemented datasets](https://continuum.readthedocs.io/en/latest/tutorials/datasets/dataset.html)
+
+> Could I use a convolution-based backbone for the encoder instead of transformer blocks?
+
+- Yes! You'd need to modify the [DyTox module](https://github.com/arthurdouillard/dytox/blob/main/continual/dytox.py). I already provide several [CNNs](https://github.com/arthurdouillard/dytox/tree/main/continual/cnn). Note that for best results, you may want to remove the ultimate block of the CNN and add strides so that the spatial features are big enough at the end to make enough "tokens"
+
+> Do I need to install nvidia's apex for the mix precision?
+
+- No! DyTox uses Pytorch native mix precision
+
+> Can I have DyTox on HuggingFace's transformer?
+
+- Yes! Well, not right now but soon. I'm working on it
+
 
 # Citation
 
