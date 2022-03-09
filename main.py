@@ -143,7 +143,7 @@ def get_args_parser():
 
     # Distillation parameters
     parser.add_argument('--auto-kd', default=False, action='store_true',
-                        help='Balance kd factor as WA')
+                        help='Balance kd factor as WA https://arxiv.org/abs/1911.07053')
     parser.add_argument('--distillation-tau', default=1.0, type=float,
                         help='Temperature for the KD')
 

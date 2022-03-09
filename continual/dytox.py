@@ -86,13 +86,18 @@ class DyTox(nn.Module):
             ).cuda()
 
     def end_finetuning(self):
+        """Start FT mode, usually with backbone freezed and balanced classes."""
         self.in_finetuning = False
 
     def begin_finetuning(self):
+        """End FT mode, usually with backbone freezed and balanced classes."""
         self.in_finetuning = True
 
     def add_model(self, nb_new_classes):
-        """Expand model as per the DyTox framework given `nb_new_classes`."""
+        """Expand model as per the DyTox framework given `nb_new_classes`.
+
+        :param nb_new_classes: Number of new classes brought by the new task.
+        """
         self.nb_classes_per_task.append(nb_new_classes)
 
         # Class tokens ---------------------------------------------------------
@@ -210,6 +215,7 @@ class DyTox(nn.Module):
         pass
 
     def epoch_log(self):
+        """Write here whatever you want to log on the internal state of the model."""
         log = {}
 
         # Compute mean distance between class tokens
@@ -236,15 +242,19 @@ class DyTox(nn.Module):
         return log
 
     def get_internal_losses(self, clf_loss):
+        """If you want to compute some internal loss, like a EWC loss for example.
+
+        :param clf_loss: The main classification loss (if you wanted to use its gradient for example).
+        :return: a dictionnary of losses, all values will be summed in the final loss.
+        """
         int_losses = {}
         return int_losses
 
     def forward_features(self, x):
-        # Shared part
+        # Shared part, this is the ENCODER
         B = x.shape[0]
 
         x = self.patch_embed(x)
-
         x = x + self.pos_embed
         x = self.pos_drop(x)
 
@@ -255,7 +265,7 @@ class DyTox(nn.Module):
             s_a.append(attn)
             s_v.append(v)
 
-        # Specific part
+        # Specific part, this is what we called the "task specific DECODER"
         if self.joint_tokens:
             return self.forward_features_jointtokens(x)
 

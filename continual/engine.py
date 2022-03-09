@@ -50,6 +50,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
             samples, targets, lam = mixup_fn(samples, targets)
 
         if sam is not None and (args.sam_first == 'memory' and task_id > 0):
+            # If you want to do the first step of SAM only on memory samples.
             x, y, _ = loader_memory.get()
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             with torch.cuda.amp.autocast(enabled=not args.no_amp):
@@ -69,6 +70,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         is_second_order = hasattr(optimizer, 'is_second_order') and optimizer.is_second_order
 
         if sam is not None and args.look_sam_k > 0:
+            # Look-sam only apply the costly sam estimation every k step.
             look_sam_update = False
             if batch_index % args.look_sam_k == 0:
                 loss_scaler.pre_step(loss, optimizer, clip_grad=max_norm,
@@ -176,6 +178,9 @@ def forward(samples, targets, model, teacher_model, criterion, lam, args):
         kd_loss = 0.
         if args.auto_kd:
             # Knowledge distillation on the probabilities
+            # I called that 'auto_kd' because the right factor is automatically
+            # computed, by interpolation between the main loss and the KD loss.
+            # This is strongly inspired by WA (CVPR 2020) --> https://arxiv.org/abs/1911.07053
             lbd = main_output_old.shape[1] / main_output.shape[1]
             loss = (1 - lbd) * loss
             kd_factor = lbd
@@ -192,11 +197,16 @@ def forward(samples, targets, model, teacher_model, criterion, lam, args):
 
     div_loss = None
     if div_output is not None:
+        # For the divergence heads, we need to create new targets.
+        # If a class belong to old tasks, it will be 0.
+        # If a class belong to the new task, it will be a class id between
+        # 1 (not 0!) and 'nb_class_in_new_task'.
+        # When doing that with mixup, some trickery is needed. (see if lam is not None).
         nb_classes = main_output.shape[1]
         nb_new_classes = div_output.shape[1] - 1
         nb_old_classes = nb_classes - nb_new_classes
 
-        if lam is not None:
+        if lam is not None:  # 'lam' is the interpolation Lambda of mixup
             # If using mixup / cutmix
             div_targets = torch.zeros_like(div_output)
             nb_classes = main_output.shape[1]

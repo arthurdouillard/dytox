@@ -149,6 +149,7 @@ def build_transform(is_train, args):
 
         t.append(transforms.ToTensor())
         if args.input_size == 32 and args.data_set == 'CIFAR':
+            # Normalization values for CIFAR100
             t.append(transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)))
         else:
             t.append(transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD))
