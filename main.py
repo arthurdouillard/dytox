@@ -357,7 +357,8 @@ def main(args):
     if args.output_dir and utils.is_main_process():
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
-    torch.distributed.barrier()
+    if args.distributed:
+        torch.distributed.barrier()
 
     print('number of params:', n_parameters)
 
@@ -509,6 +510,8 @@ def main(args):
         if args.distributed:
             del model
             model = torch.nn.parallel.DistributedDataParallel(model_without_ddp, device_ids=[args.gpu], find_unused_parameters=True)
+        else:
+            model = model_without_ddp
 
         model_without_ddp.nb_epochs = epochs
         model_without_ddp.nb_batch_per_epoch = len(loader_train)
@@ -631,6 +634,8 @@ def main(args):
             if args.distributed:
                 del model
                 model = torch.nn.parallel.DistributedDataParallel(model_without_ddp, device_ids=[args.gpu], find_unused_parameters=True)
+            else:
+                model = model_without_ddp
 
             model_without_ddp.begin_finetuning()
 

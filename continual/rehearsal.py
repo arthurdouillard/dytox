@@ -178,7 +178,10 @@ def extract_features(dataset, model, ensemble_handling='last'):
 
     with torch.no_grad():
         for x, y, _ in loader:
-            feats, _, _ = model.module.forward_features(x.cuda())
+            if hasattr(model, 'module'):
+                feats, _, _ = model.module.forward_features(x.cuda())
+            else:
+                feats, _, _ = model.forward_features(x.cuda())
 
             if isinstance(feats, list):
                 if ensemble_handling == 'last':
