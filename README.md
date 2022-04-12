@@ -6,7 +6,7 @@
 
 [![Paper](https://img.shields.io/badge/arXiv-2004.13513-brightgreen)](https://arxiv.org/abs/2111.11326)
 ![CVPR](https://img.shields.io/badge/CVPR-2022-blue)
-
+[![Youtube](https://img.shields.io/badge/Youtube-link-red)](https://www.youtube.com/watch?v=O1GNm4WdrNw)
 
 ![DyTox main figure](images/dytox.png)
 
