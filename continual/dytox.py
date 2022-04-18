@@ -276,9 +276,7 @@ class DyTox(nn.Module):
         for task_token in self.task_tokens:
             task_token = task_token.expand(B, -1, -1)
 
-            ca_blocks = self.tabs
-
-            for blk in ca_blocks:
+            for blk in self.tabs:
                 task_token, attn, v = blk(torch.cat((task_token, x), dim=1), mask_heads=mask_heads)
 
             attentions.append(attn)

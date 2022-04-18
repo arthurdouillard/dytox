@@ -290,7 +290,7 @@ class Block(nn.Module):
         self.mlp.apply(self.mlp._init_weights)
 
     def forward(self, x, mask_heads=None, task_index=1, attn_mask=None):
-        if isinstance(self.attn, ClassAttention):  # Like in CaiT
+        if isinstance(self.attn, ClassAttention) or isinstance(self.attn, JointCA):  # Like in CaiT
             cls_token = x[:, :task_index]
 
             xx = self.norm1(x)
@@ -368,7 +368,7 @@ class ClassAttention(nn.Module):
         return x_cls, attn, v
 
 
-class JointCA(ClassAttention):
+class JointCA(nn.Module):
     """Forward all task tokens together.
 
     It uses a masked attention so that task tokens don't interact between them.
@@ -426,7 +426,7 @@ class JointCA(ClassAttention):
             mask[:, i, i+1:nb_task_tokens] = True
         return mask
 
-    def forward(self, x, attn_mask=None, nb_task_tokens=1):
+    def forward(self, x, attn_mask=False, nb_task_tokens=1, **kwargs):
         B, N, C = x.shape
         q = self.q(x[:,:nb_task_tokens]).reshape(B, nb_task_tokens, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
         k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
@@ -435,8 +435,8 @@ class JointCA(ClassAttention):
         v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
 
         attn = (q @ k.transpose(-2, -1))
-        if attn_mask is not None:
-            mask = self.get_attention_mask(attn.shape, nb_task_tokens, attn_mask)
+        if attn_mask:
+            mask = self.get_attention_mask(attn.shape, nb_task_tokens)
             attn[mask] = -float('inf')
         attn = attn.softmax(dim=-1)
 
