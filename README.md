@@ -112,9 +112,13 @@ bash train.sh 0,1 \
 
 - No! DyTox uses Pytorch native mix precision
 
-> Can I have DyTox on HuggingFace's transformer?
+> Can I run DyTox on a single GPU instead of two?
 
-- Yes! Well, not right now but soon. I'm working on it
+- In theory, yes. Although the performance is a [bit lower](https://github.com/arthurdouillard/dytox/issues/2). I'll try to find the root cause of this. But on two GPUs the results are perfectly reproducible.
+
+> What is this finetuning phase?
+
+- New classes data is downsampled to the same amount of old classes data stored in the rehearsal memory. And the encoder is frozen. You can see which modules are frozen in which task in the [options files](https://github.com/arthurdouillard/dytox/blob/main/options/model/cifar_dytox.yaml#L35-L36). 
 
 
 # Citation
