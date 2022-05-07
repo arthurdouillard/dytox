@@ -72,6 +72,12 @@ def bce_with_logits(x, y):
     )
 
 
+def soft_bce_with_logits(x, y):
+    return F.binary_cross_entropy_with_logits(
+        x, y)
+
+
+
 def bce_smooth_pos_with_logits(smooth):
     def _func(x, y):
         return F.binary_cross_entropy_with_logits(

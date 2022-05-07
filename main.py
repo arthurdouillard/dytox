@@ -30,7 +30,7 @@ from continual.rehearsal import Memory, get_finetuning_dataset
 from continual.sam import SAM
 from continual.datasets import build_dataset
 from continual.engine import eval_and_log, train_one_epoch
-from continual.losses import bce_with_logits
+from continual.losses import bce_with_logits, soft_bce_with_logits
 
 warnings.filterwarnings("ignore")
 
@@ -368,6 +368,8 @@ def main(args):
 
     if args.mixup > 0. or args.cutmix > 0.:
         criterion = SoftTargetCrossEntropy()
+        if args.bce_loss:
+            criterion = soft_bce_with_logits
     elif args.bce_loss:
         criterion = bce_with_logits
     elif args.smoothing:
