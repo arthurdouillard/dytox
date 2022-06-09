@@ -61,6 +61,46 @@ class RASampler(torch.utils.data.Sampler):
         self.epoch = epoch
 
 
+class RASamplerNoDist(RASampler):
+    def __init__(self, dataset, num_replicas=None, shuffle=True):
+        if num_replicas is None:
+            num_replicas = 2
+        self.dataset = dataset
+        self.num_replicas = num_replicas
+        self.epoch = 0
+        self.num_samples = int(math.ceil(len(self.dataset) * 3.0 / self.num_replicas))
+        self.total_size = self.num_samples * self.num_replicas
+        # self.num_selected_samples = int(math.ceil(len(self.dataset) / self.num_replicas))
+        self.num_selected_samples = int(math.floor(len(self.dataset) // 256 * 256 / self.num_replicas))
+        self.shuffle = shuffle
+        self.rank = 0
+
+    def __iter__(self):
+        # deterministically shuffle based on epoch
+        g = torch.Generator()
+        g.manual_seed(self.epoch)
+        if self.shuffle:
+            indices = torch.randperm(len(self.dataset), generator=g).tolist()
+        else:
+            indices = list(range(len(self.dataset)))
+
+        # add extra samples to make it evenly divisible
+        indices = [ele for ele in indices for i in range(3)]
+        indices += indices[:(self.total_size - len(indices))]
+        assert len(indices) == self.total_size
+
+        # subsample
+        indices = indices[self.rank:self.total_size:self.num_replicas]
+        assert len(indices) == self.num_samples
+
+        self.rank = (self.rank + 1) % self.num_replicas
+
+        return iter(indices[:self.num_selected_samples])
+
+    def __len__(self):
+        return self.num_selected_samples * self.num_replicas
+
+
 def get_sampler(dataset_train, dataset_val, args):
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -83,7 +123,10 @@ def get_sampler(dataset_train, dataset_val, args):
         else:
             sampler_val = torch.utils.data.SequentialSampler(dataset_val)
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        if args.repeated_aug:
+            sampler_train = RASamplerNoDist(dataset_train, num_replicas=2, shuffle=True)
+        else:
+            sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(dataset_val)
 
     return sampler_train, sampler_val
@@ -105,3 +148,5 @@ def get_train_sampler(dataset_train, args):
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
     return sampler_train
+
+

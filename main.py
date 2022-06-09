@@ -12,6 +12,7 @@ import time
 import warnings
 from pathlib import Path
 import yaml
+from continual.pod import _local_pod
 
 import numpy as np
 import torch
@@ -144,8 +145,13 @@ def get_args_parser():
     # Distillation parameters
     parser.add_argument('--auto-kd', default=False, action='store_true',
                         help='Balance kd factor as WA https://arxiv.org/abs/1911.07053')
+    parser.add_argument('--kd', default=0., type=float)
     parser.add_argument('--distillation-tau', default=1.0, type=float,
                         help='Temperature for the KD')
+    parser.add_argument('--resnet', default=False, action='store_true')
+    parser.add_argument('--pod', default=None,  type=float)
+    parser.add_argument('--pod-scales', default=[1], type=int, nargs='+')
+    parser.add_argument('--pod-scaling', default=False,  action='store_true')
 
     # Dataset parameters
     parser.add_argument('--data-path', default='', type=str,
@@ -535,7 +541,9 @@ def main(args):
 
         if args.distributed:
             del model
-            model = torch.nn.parallel.DistributedDataParallel(model_without_ddp, device_ids=[args.gpu], find_unused_parameters=True)
+            model = torch.nn.parallel.DistributedDataParallel(
+                model_without_ddp, device_ids=[args.gpu], find_unused_parameters=True)
+            torch.distributed.barrier()
         else:
             model = model_without_ddp
 
@@ -575,7 +583,8 @@ def main(args):
                 teacher_model=teacher_model,
                 model_without_ddp=model_without_ddp,
                 sam=sam,
-                loader_memory=loader_memory
+                loader_memory=loader_memory,
+                pod=args.pod if task_id > 0 else None, pod_scales=args.pod_scales
             )
 
             lr_scheduler.step(epoch)
@@ -715,7 +724,8 @@ def main(args):
                     debug=args.debug,
                     args=args,
                     teacher_model=teacher_model if args.finetuning_teacher else None,
-                    model_without_ddp=model_without_ddp
+                    model_without_ddp=model_without_ddp,
+                    pod=args.pod if task_id > 0 else None, pod_scales=args.pod_scales
                 )
 
                 if epoch % 10 == 0 or epoch == args.finetuning_epochs - 1:

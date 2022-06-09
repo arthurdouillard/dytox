@@ -3,6 +3,7 @@ from typing import Any, Callable, List, Optional, Type, Union
 
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
 from continual.cnn import AbstractCNN
 from torch import Tensor
 
@@ -79,7 +80,7 @@ class BasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.relu(out)
+        #out = self.relu(out)
 
         return out
 
@@ -255,10 +256,10 @@ class ResNet(AbstractCNN):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        x = F.relu(self.layer1(x), inplace=True)
+        x = F.relu(self.layer2(x), inplace=True)
+        x = F.relu(self.layer3(x), inplace=True)
+        x = F.relu(self.layer4(x), inplace=True)
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
@@ -275,13 +276,13 @@ class ResNet(AbstractCNN):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        f1 = self.layer1(x)
+        f2 = self.layer2(F.relu(f1))
+        f3 = self.layer3(F.relu(f2))
+        f4 = self.layer4(F.relu(f3))
 
-        x = self.head(x)
-        return x.view(x.shape[0], self.embed_dim, -1).permute(0, 2, 1)
+        x = self.head(f4)
+        return x.view(x.shape[0], self.embed_dim, -1).permute(0, 2, 1), [f1, f2, f3, f4]
 
     def forward_features(self, x):
         x = self.conv1(x)
@@ -289,14 +290,14 @@ class ResNet(AbstractCNN):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+        f1 = F.relu(self.layer1(x), inplace=True)
+        f2 = F.relu(self.layer2(f1), inplace=True)
+        f3 = F.relu(self.layer3(f2), inplace=True)
+        f4 = F.relu(self.layer4(f3), inplace=True)
 
-        x = self.avgpool(x)
+        x = self.avgpool(f4)
         x = torch.flatten(x, 1)
-        return x, None, None
+        return x, [f1, f2, f3, f4], None
 
 
 def _resnet(

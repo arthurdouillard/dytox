@@ -4,7 +4,9 @@ import torch
 from timm.models.layers import trunc_normal_
 from torch import nn
 
+from continual.cnn import resnet18
 import continual.utils as cutils
+from continual.convit import ClassAttention, Block
 
 
 class ContinualClassifier(nn.Module):
@@ -51,7 +53,8 @@ class DyTox(nn.Module):
         individual_classifier='',
         head_div=False,
         head_div_mode=['tr', 'ft'],
-        joint_tokens=False
+        joint_tokens=False,
+        resnet=False
     ):
         super().__init__()
 
@@ -64,16 +67,49 @@ class DyTox(nn.Module):
         self.joint_tokens = joint_tokens
         self.in_finetuning = False
 
+        self.use_resnet = resnet
+
         self.nb_classes_per_task = [nb_classes]
 
-        self.patch_embed = transformer.patch_embed
-        self.pos_embed = transformer.pos_embed
-        self.pos_drop = transformer.pos_drop
-        self.sabs = transformer.blocks[:transformer.local_up_to_layer]
+        if self.use_resnet:
+            print('ResNet18 backbone for ens')
+            self.backbone = resnet18()
+            self.backbone.head = nn.Sequential(
+                nn.Conv2d(256, 384, kernel_size=1),
+                nn.BatchNorm2d(384),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(384, 504, kernel_size=1),
+                nn.BatchNorm2d(504),
+                nn.ReLU(inplace=True)
+            )
+            self.backbone.avgpool = nn.Identity()
+            self.backbone.layer4 = nn.Identity()
+            #self.backbone.layer4 = self.backbone._make_layer_nodown(
+            #    256, 512, 2, stride=1, dilation=2
+            #)
+            self.backbone = self.backbone.cuda()
+            self.backbone.embed_dim = 504
+            self.embed_dim = self.backbone.embed_dim
 
-        self.tabs = transformer.blocks[transformer.local_up_to_layer:]
+            self.tabs = nn.ModuleList([
+                Block(
+                    dim=self.embed_dim, num_heads=12, mlp_ratio=4, qkv_bias=False, qk_scale=None,
+                    drop=0., attn_drop=0., drop_path=0., norm_layer=nn.LayerNorm,
+                    attention_type=ClassAttention
+                ).cuda()
+            ])
+            self.tabs[0].reset_parameters()
 
-        self.task_tokens = nn.ParameterList([transformer.cls_token])
+            token = nn.Parameter(torch.zeros(1, 1, self.embed_dim).cuda())
+            trunc_normal_(token, std=.02)
+            self.task_tokens = nn.ParameterList([token])
+        else:
+            self.patch_embed = transformer.patch_embed
+            self.pos_embed = transformer.pos_embed
+            self.pos_drop = transformer.pos_drop
+            self.sabs = transformer.blocks[:transformer.local_up_to_layer]
+            self.tabs = transformer.blocks[transformer.local_up_to_layer:]
+            self.task_tokens = nn.ParameterList([transformer.cls_token])
 
         if self.individual_classifier != '':
             in_dim, out_dim = self._get_ind_clf_dim()
@@ -161,10 +197,14 @@ class DyTox(nn.Module):
             elif name == 'task_tokens':
                 cutils.freeze_parameters(self.task_tokens, requires_grad=requires_grad)
             elif name == 'sab':
-                self.sabs.eval()
-                cutils.freeze_parameters(self.patch_embed, requires_grad=requires_grad)
-                cutils.freeze_parameters(self.pos_embed, requires_grad=requires_grad)
-                cutils.freeze_parameters(self.sabs, requires_grad=requires_grad)
+                if self.use_resnet:
+                    self.backbone.eval()
+                    cutils.freeze_parameters(self.backbone, requires_grad=requires_grad)
+                else:
+                    self.sabs.eval()
+                    cutils.freeze_parameters(self.patch_embed, requires_grad=requires_grad)
+                    cutils.freeze_parameters(self.pos_embed, requires_grad=requires_grad)
+                    cutils.freeze_parameters(self.sabs, requires_grad=requires_grad)
             elif name == 'tab':
                 self.tabs.eval()
                 cutils.freeze_parameters(self.tabs, requires_grad=requires_grad)
@@ -254,16 +294,18 @@ class DyTox(nn.Module):
         # Shared part, this is the ENCODER
         B = x.shape[0]
 
-        x = self.patch_embed(x)
-        x = x + self.pos_embed
-        x = self.pos_drop(x)
+        if self.use_resnet:
+            x, self.feats = self.backbone.forward_tokens(x)
+        else:
+            x = self.patch_embed(x)
+            x = x + self.pos_embed
+            x = self.pos_drop(x)
 
-        s_e, s_a, s_v = [], [], []
-        for blk in self.sabs:
-            x, attn, v = blk(x)
-            s_e.append(x)
-            s_a.append(attn)
-            s_v.append(v)
+            self.feats = []
+            for blk in self.sabs:
+                x, attn, v = blk(x)
+                self.feats.append(x)
+            self.feats.pop(-1)
 
         # Specific part, this is what we called the "task specific DECODER"
         if self.joint_tokens:

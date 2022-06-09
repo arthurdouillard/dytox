@@ -119,7 +119,8 @@ def update_dytox(model_without_ddp, task_id, args):
             individual_classifier=args.ind_clf,
             head_div=args.head_div > 0.,
             head_div_mode=args.head_div_mode,
-            joint_tokens=args.joint_tokens
+            joint_tokens=args.joint_tokens,
+            resnet=args.resnet
         )
     else:
         print(f'Updating ensemble, new embed dim {model_without_ddp.embed_dim}.')

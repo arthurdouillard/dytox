@@ -16,6 +16,7 @@ from torch.nn import functional as F
 
 import continual.utils as utils
 from continual.losses import DistillationLoss
+from continual.pod import pod_loss
 
 
 CE = SoftTargetCrossEntropy()
@@ -29,7 +30,8 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
                     teacher_model: torch.nn.Module = None,
                     model_without_ddp: torch.nn.Module = None,
                     sam: torch.optim.Optimizer = None,
-                    loader_memory=None):
+                    loader_memory=None,
+                    pod=None, pod_scales=[1]):
     """Code is a bit ugly to handle SAM, sorry! :upside_down_face:"""
     model.train(set_training_mode)
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -63,6 +65,17 @@ def train_one_epoch(model: torch.nn.Module, criterion: DistillationLoss,
         internal_losses = model_without_ddp.get_internal_losses(loss)
         for internal_loss_value in internal_losses.values():
             loss += internal_loss_value
+
+        if pod is not None and teacher_model is not None:
+            if args.pod_scaling:
+                nb_classes = sum(model.module.nb_classes_per_task)
+                nb_new_classes = model.module.nb_classes_per_task[-1]
+                pod_scaling = math.sqrt(nb_new_classes / nb_classes)
+            else:
+                pod_scaling = 1.0
+
+            loss += pod_scaling * pod * compute_pod(
+                model.module.feats, teacher_model.feats, pod_scales)
 
         check_loss(loss)
 
@@ -194,6 +207,15 @@ def forward(samples, targets, model, teacher_model, criterion, lam, args):
                     log_target=True
             ) * (tau ** 2)
             kd_loss += kd_factor * _kd_loss
+        elif args.kd > 0.:
+            _kd_loss = F.kl_div(
+                    F.log_softmax(logits_for_distil / tau, dim=1),
+                    F.log_softmax(main_output_old / tau, dim=1),
+                    reduction='mean',
+                    log_target=True
+            ) * (tau ** 2)
+            kd_loss += args.kd * _kd_loss
+
 
     div_loss = None
     if div_output is not None:
@@ -226,6 +248,17 @@ def forward(samples, targets, model, teacher_model, criterion, lam, args):
         div_loss = args.head_div * criterion(div_output, div_targets)
 
     return loss, kd_loss, div_loss
+
+
+def compute_pod(feats, old_feats, scales):
+    if len(feats[0].shape) == 3:
+        # transformer archi and not cnn
+        bs, nb_tokens, dim = feats[0].shape
+        w = int(math.sqrt(nb_tokens))
+        feats = [f.view(bs, w, w, dim) for f in feats]
+        old_feats = [f.view(bs, w, w, dim) for f in old_feats]
+
+    return pod_loss(feats, old_feats, scales)
 
 
 @torch.no_grad()
