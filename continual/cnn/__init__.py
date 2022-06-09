@@ -6,4 +6,4 @@ from continual.cnn.resnet import (
 )
 from continual.cnn.resnet_scs import resnet18_scs, resnet18_scs_avg, resnet18_scs_max
 from continual.cnn.vgg import vgg16_bn, vgg16
-from continual.cnn.resnet_rebuffi import CifarResNet as rebuffi
+from continual.cnn.resnet_rebuffi import resnet_rebuffi

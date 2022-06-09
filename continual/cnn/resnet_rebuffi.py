@@ -193,6 +193,7 @@ class CifarResNet(AbstractCNN):
         self.all_attentions = all_attentions
         self._downsampling_type = downsampling
         self.last_relu = last_relu
+        self.zero_residual = zero_residual
 
         Block = ResidualBlock if not preact else PreActResidualBlock
 
@@ -215,7 +216,9 @@ class CifarResNet(AbstractCNN):
 
         self.embed_dim = 4 * nf
         self.head = None
+        self.init_params()
 
+    def init_params(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -225,7 +228,7 @@ class CifarResNet(AbstractCNN):
             elif isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
 
-        if zero_residual:
+        if self.zero_residual:
             for m in self.modules():
                 if isinstance(m, ResidualBlock):
                     nn.init.constant_(m.bn_b.weight, 0)
