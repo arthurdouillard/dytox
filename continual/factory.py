@@ -1,9 +1,9 @@
 import torch
 
 from continual import convit, dytox, samplers, vit
-from continual.cnn import (InceptionV3, rebuffi, resnet18, resnet34, resnet50,
+from continual.cnn import (InceptionV3, resnet18, resnet34, resnet50,
                            resnext50_32x4d, seresnet18, vgg16, vgg16_bn,
-                           wide_resnet50_2, resnet18_scs, resnet18_scs_max, resnet18_scs_avg)
+                           wide_resnet50_2, resnet18_scs, resnet18_scs_max, resnet18_scs_avg, resnet_rebuffi)
 
 
 def get_backbone(args):
@@ -47,7 +47,7 @@ def get_backbone(args):
     elif args.model == 'inception3': model = InceptionV3()
     elif args.model == 'vgg16bn': model = vgg16_bn()
     elif args.model == 'vgg16': model = vgg16()
-    elif args.model == 'rebuffi': model = rebuffi()
+    elif args.model == 'rebuffi': model = resnet_rebuffi()
     else:
         raise NotImplementedError(f'Unknown backbone {args.model}')
 
@@ -55,15 +55,15 @@ def get_backbone(args):
 
 
 
-def get_loaders(dataset_train, dataset_val, args):
+def get_loaders(dataset_train, dataset_val, args, finetuning=False):
     sampler_train, sampler_val = samplers.get_sampler(dataset_train, dataset_val, args)
 
     loader_train = torch.utils.data.DataLoader(
-        dataset_train, sampler=sampler_train,
+        dataset_train, sampler=None if (finetuning and args.ft_no_sampling) else sampler_train,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
         pin_memory=args.pin_mem,
-        drop_last=True,
+        drop_last=len(sampler_train) > args.batch_size,
     )
 
     loader_val = torch.utils.data.DataLoader(
