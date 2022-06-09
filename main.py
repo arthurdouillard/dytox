@@ -185,6 +185,8 @@ def get_args_parser():
                         help="Eval model every X epochs, if None only eval at the task end")
     parser.add_argument('--debug', default=False, action='store_true',
                         help='Only do one batch per epoch')
+    parser.add_argument('--retrain-scratch', default=False, action='store_true',
+                        help='Retrain from scratch on all data after each step (JOINT).')
     parser.add_argument('--max-task', default=None, type=int,
                         help='Max task id to train on')
     parser.add_argument('--name', default='', help='Name to display for screen')
@@ -231,6 +233,15 @@ def get_args_parser():
     # Rehearsal memory
     parser.add_argument('--memory-size', default=2000, type=int,
                         help='Total memory size in number of stored (image, label).')
+    parser.add_argument('--distributed-memory', default=False, action='store_true',
+                        help='Use different rehearsal memory per process.')
+    parser.add_argument('--oversample-memory', default=1, type=int,
+                        help='Amount of time we repeat the same rehearsal.')
+    parser.add_argument('--oversample-memory-ft', default=1, type=int,
+                        help='Amount of time we repeat the same rehearsal for finetuning, only for old classes not new classes.')
+    parser.add_argument('--rehearsal-test-trsf', default=False, action='store_true')
+    parser.add_argument('--rehearsal-modes', default=1, type=int,
+                        help='Select N on a single gpu, but with mem_size/N.')
     parser.add_argument('--fixed-memory', default=False, action='store_true',
                         help='Dont fully use memory when no all classes are seen as in Hou et al. 2019')
     parser.add_argument('--rehearsal', default="random",
@@ -259,6 +270,7 @@ def get_args_parser():
                         help='Reset classifier before finetuning phase (similar to GDumb/DER).')
     parser.add_argument('--only-ft', default=False, action='store_true',
                         help='Only train on FT data')
+    parser.add_argument('--ft-no-sampling', default=False, action='store_true')
 
     # What to freeze
     parser.add_argument('--freeze-task', default=[], nargs="*", type=str,
@@ -350,7 +362,10 @@ def main(args):
                 pass  # touch
         log_store = {'results': {}}
 
-        args.output_dir = os.path.join(args.output_basedir, f"{datetime.datetime.now().strftime('%y-%m-%d')}_{args.name}_{args.trial_id}")
+        args.output_dir = os.path.join(
+            args.output_basedir,
+            f"{datetime.datetime.now().strftime('%y-%m-%d')}_{args.data_set}-{args.initial_increment}-{args.increment}_{args.name}_{args.trial_id}"
+        )
     else:
         log_store = None
         log_path = long_log_path = None
@@ -384,7 +399,7 @@ def main(args):
     memory = None
     if args.memory_size > 0:
         memory = Memory(
-            args.memory_size, scenario_train.nb_classes, args.rehearsal, args.fixed_memory
+            args.memory_size, scenario_train.nb_classes, args.rehearsal, args.fixed_memory, args.rehearsal_modes
         )
 
     nb_classes = args.initial_increment
@@ -436,7 +451,9 @@ def main(args):
             ))
             if not args.sep_memory:
                 previous_size = len(dataset_train)
-                dataset_train.add_samples(*memory.get())
+
+                for _ in range(args.oversample_memory):
+                    dataset_train.add_samples(*memory.get())
                 print(f"{len(dataset_train) - previous_size} samples added from memory.")
 
             if args.only_ft:
@@ -465,6 +482,13 @@ def main(args):
 
         if task_id > 0:
             model_without_ddp.freeze(args.freeze_task)
+        # ----------------------------------------------------------------------
+
+        # ----------------------------------------------------------------------
+        # Debug: Joint training from scratch on all previous data
+        if args.retrain_scratch:
+            model_without_ddp.init_params()
+            dataset_train = scenario_train[:task_id+1]
         # ----------------------------------------------------------------------
 
         # ----------------------------------------------------------------------
@@ -585,21 +609,57 @@ def main(args):
                 )
                 logger.end_epoch()
 
-        if memory is not None:
-            task_memory_path = os.path.join(args.resume, f'memory_{task_id}.npz')
+
+        if memory is not None and args.distributed_memory:
+            task_memory_path = os.path.join(args.resume, f'dist_memory_{task_id}-{utils.get_rank()}.npz')
             if os.path.isdir(args.resume) and os.path.exists(task_memory_path):
                 # Resuming this task step, thus reloading saved memory samples
                 # without needing to re-compute them
                 memory.load(task_memory_path)
             else:
-                memory.add(scenario_train[task_id], model, args.initial_increment if task_id == 0 else args.increment)
+                task_set_to_rehearse = scenario_train[task_id]
+                if args.rehearsal_test_trsf:
+                    task_set_to_rehearse.trsf = scenario_val[task_id].trsf
+
+                memory.add(task_set_to_rehearse, model, args.initial_increment if task_id == 0 else args.increment)
+                #memory.add(scenario_train[task_id], model, args.initial_increment if task_id == 0 else args.increment)
 
                 if args.resume != '':
                     memory.save(task_memory_path)
                 else:
-                    memory.save(os.path.join(args.output_dir, f'memory_{task_id}.npz'))
+                    memory.save(os.path.join(args.output_dir, f'dist_memory_{task_id}-{utils.get_rank()}.npz'))
 
-            assert len(memory) <= args.memory_size
+        if memory is not None and not args.distributed_memory:
+            if utils.is_main_process():
+                task_memory_path = os.path.join(args.resume, f'memory_{task_id}.npz')
+                if os.path.isdir(args.resume) and os.path.exists(task_memory_path):
+                    # Resuming this task step, thus reloading saved memory samples
+                    # without needing to re-compute them
+                    memory.load(task_memory_path)
+                else:
+                    task_set_to_rehearse = scenario_train[task_id]
+                    if args.rehearsal_test_trsf:
+                        task_set_to_rehearse.trsf = scenario_val[task_id].trsf
+
+                    memory.add(task_set_to_rehearse, model, args.initial_increment if task_id == 0 else args.increment)
+
+                    if args.resume != '':
+                        memory.save(task_memory_path)
+                    else:
+                        memory.save(os.path.join(args.output_dir, f'memory_{task_id}-{utils.get_rank()}.npz'))
+
+            assert len(memory) <= args.memory_size, (len(memory), args.memory_size)
+            torch.distributed.barrier()
+
+            if not utils.is_main_process():
+                if args.resume != '':
+                    memory.load(task_memory_path)
+                else:
+                    memory.load(os.path.join(args.output_dir, f'memory_{task_id}-0.npz'))
+                    memory.save(os.path.join(args.output_dir, f'memory_{task_id}-{utils.get_rank()}.npz'))
+
+            torch.distributed.barrier()
+
 
         # ----------------------------------------------------------------------
         # FINETUNING
@@ -624,10 +684,11 @@ def main(args):
         # ----------------------------------------------------------------------
 
         if args.finetuning and memory and (task_id > 0 or scenario_train.nb_classes == args.initial_increment) and not skipped_task:
-            dataset_finetune = get_finetuning_dataset(dataset_train, memory, args.finetuning)
+            dataset_finetune = get_finetuning_dataset(dataset_train, memory, args.finetuning, args.oversample_memory_ft, task_id)
             print(f'Finetuning phase of type {args.finetuning} with {len(dataset_finetune)} samples.')
 
-            loader_finetune, loader_val = factory.get_loaders(dataset_finetune, dataset_val, args)
+            loader_finetune, loader_val = factory.get_loaders(dataset_finetune, dataset_val, args, finetuning=True)
+            print(f'Train-ft and val loaders of lengths: {len(loader_finetune)} and {len(loader_val)}.')
             if args.finetuning_resetclf:
                 model_without_ddp.reset_classifier()
 
@@ -636,6 +697,7 @@ def main(args):
             if args.distributed:
                 del model
                 model = torch.nn.parallel.DistributedDataParallel(model_without_ddp, device_ids=[args.gpu], find_unused_parameters=True)
+                torch.distributed.barrier()
             else:
                 model = model_without_ddp
 
@@ -644,7 +706,7 @@ def main(args):
             args.lr  = args.finetuning_lr * args.batch_size * utils.get_world_size() / 512.0
             optimizer = create_optimizer(args, model_without_ddp)
             for epoch in range(args.finetuning_epochs):
-                if args.distributed:
+                if args.distributed and hasattr(loader_finetune.sampler, 'set_epoch'):
                     loader_finetune.sampler.set_epoch(epoch)
                 train_stats = train_one_epoch(
                     model, criterion, loader_finetune,
@@ -689,7 +751,6 @@ def main(args):
         if log_path is not None and utils.is_main_process():
             with open(log_path, 'a+') as f:
                 f.write(json.dumps(log_store['summary']) + '\n')
-
 
 
 def load_options(args, options):

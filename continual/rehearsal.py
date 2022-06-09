@@ -5,11 +5,12 @@ import torch
 
 
 class Memory:
-    def __init__(self, memory_size, nb_total_classes, rehearsal, fixed=True):
+    def __init__(self, memory_size, nb_total_classes, rehearsal, fixed=True, modes=1):
         self.memory_size = memory_size
         self.nb_total_classes = nb_total_classes
         self.rehearsal = rehearsal
         self.fixed = fixed
+        self.modes = modes
 
         self.x = self.y = self.t = None
 
@@ -54,9 +55,16 @@ class Memory:
         x, y, t = [], [], []
         for class_id in np.unique(self.y):
             indexes = np.where(self.y == class_id)[0]
-            x.append(self.x[indexes[:self.memory_per_class]])
-            y.append(self.y[indexes[:self.memory_per_class]])
-            t.append(self.t[indexes[:self.memory_per_class]])
+            if self.modes > 1:
+                selected_indexes = np.concatenate([
+                    indexes[:len(indexes)//2][:self.memory_per_class//2],
+                    indexes[len(indexes)//2:][:self.memory_per_class//2],
+                ])
+            else:
+                selected_indexes = indexes[:self.memory_per_class]
+            x.append(self.x[selected_indexes])
+            y.append(self.y[selected_indexes])
+            t.append(self.t[selected_indexes])
 
         self.x = np.concatenate(x)
         self.y = np.concatenate(y)
@@ -65,7 +73,15 @@ class Memory:
     def add(self, dataset, model, nb_new_classes):
         self.nb_classes += nb_new_classes
 
-        x, y, t = herd_samples(dataset, model, self.memory_per_class, self.rehearsal)
+        if self.modes > 1:  # todo modes more than 2
+            assert self.modes == 2
+            x1, y1, t1 = herd_samples(dataset, model, self.memory_per_class//2, self.rehearsal)
+            x2, y2, t2 = herd_samples(dataset, model, self.memory_per_class//2, self.rehearsal)
+            x = np.concatenate((x1, x2))
+            y = np.concatenate((y1, y2))
+            t = np.concatenate((t1, t2))
+        else:
+            x, y, t = herd_samples(dataset, model, self.memory_per_class, self.rehearsal)
         #assert len(y) == self.memory_per_class * nb_new_classes, (len(y), self.memory_per_class, nb_new_classes)
 
         if self.x is None:
@@ -237,9 +253,21 @@ def icarl_selection(features, nb_examplars):
     return herding_matrix.argsort()[:nb_examplars]
 
 
-def get_finetuning_dataset(dataset, memory, finetuning='balanced'):
+def get_finetuning_dataset(dataset, memory, finetuning='balanced', oversample_old=1, task_id=0):
     if finetuning == 'balanced':
         x, y, t = memory.get()
+
+        if oversample_old > 1:
+            old_indexes = np.where(t < task_id)[0]
+            assert len(old_indexes) > 0
+            new_indexes = np.where(t >= task_id)[0]
+
+            indexes = np.concatenate([
+                np.repeat(old_indexes, oversample_old),
+                new_indexes
+            ])
+            x, y, t = x[indexes], y[indexes], t[indexes]
+
         new_dataset = copy.deepcopy(dataset)
         new_dataset._x = x
         new_dataset._y = y
