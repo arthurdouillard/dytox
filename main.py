@@ -241,11 +241,15 @@ def get_args_parser():
                         help='Total memory size in number of stored (image, label).')
     parser.add_argument('--distributed-memory', default=False, action='store_true',
                         help='Use different rehearsal memory per process.')
+    parser.add_argument('--global-memory', default=False, action='store_false', dest='distributed_memory',
+                        help='Use same rehearsal memory for all process.')
+    parser.set_defaults(distributed_memory=True)
     parser.add_argument('--oversample-memory', default=1, type=int,
                         help='Amount of time we repeat the same rehearsal.')
     parser.add_argument('--oversample-memory-ft', default=1, type=int,
                         help='Amount of time we repeat the same rehearsal for finetuning, only for old classes not new classes.')
-    parser.add_argument('--rehearsal-test-trsf', default=False, action='store_true')
+    parser.add_argument('--rehearsal-test-trsf', default=False, action='store_true',
+                        help='Extract features without data augmentation.')
     parser.add_argument('--rehearsal-modes', default=1, type=int,
                         help='Select N on a single gpu, but with mem_size/N.')
     parser.add_argument('--fixed-memory', default=False, action='store_true',
@@ -276,7 +280,8 @@ def get_args_parser():
                         help='Reset classifier before finetuning phase (similar to GDumb/DER).')
     parser.add_argument('--only-ft', default=False, action='store_true',
                         help='Only train on FT data')
-    parser.add_argument('--ft-no-sampling', default=False, action='store_true')
+    parser.add_argument('--ft-no-sampling', default=False, action='store_true',
+                        help='Dont use particular sampling for the finetuning phase.')
 
     # What to freeze
     parser.add_argument('--freeze-task', default=[], nargs="*", type=str,
@@ -639,8 +644,8 @@ def main(args):
                     memory.save(os.path.join(args.output_dir, f'dist_memory_{task_id}-{utils.get_rank()}.npz'))
 
         if memory is not None and not args.distributed_memory:
+            task_memory_path = os.path.join(args.resume, f'memory_{task_id}.npz')
             if utils.is_main_process():
-                task_memory_path = os.path.join(args.resume, f'memory_{task_id}.npz')
                 if os.path.isdir(args.resume) and os.path.exists(task_memory_path):
                     # Resuming this task step, thus reloading saved memory samples
                     # without needing to re-compute them
