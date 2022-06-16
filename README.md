@@ -17,6 +17,7 @@ Welcome to DyTox, the first transformer designed explicitly for Continual Learni
 Work led by [Arthur Douillard](https://arthurdouillard.com/) and co-authored with [Alexandre Ramé](https://alexrame.github.io/),
 [Guillaume Couairon](https://phazcode.gitlab.io/about/), and [Matthieu Cord](http://webia.lip6.fr/~cord/).
 
+See our erratum [here](erratum_distributed.md).
 
 # Installation
 
@@ -47,7 +48,8 @@ bash train.sh 0,1 \
     --options options/data/cifar100_2-2.yaml options/data/cifar100_order1.yaml options/model/cifar_dytox.yaml \
     --name dytox \
     --data-path MY_PATH_TO_DATASET \
-    --output-basedir PATH_TO_SAVE_CHECKPOINTS
+    --output-basedir PATH_TO_SAVE_CHECKPOINTS \
+    --memory-size 1000
 ```
 
 Folders will be auto-created with the results at
@@ -75,7 +77,8 @@ bash train.sh 0,1 \
     --name dytox \
     --data-path MY_PATH_TO_DATASET \
     --resume MY_PATH_TO_CKPT_FOLDER_OF_EXP \
-    --start-task TASK_ID_STARTING_FROM_0_OF_WHEN_THE_EXP_HAD_STOPPED
+    --start-task TASK_ID_STARTING_FROM_0_OF_WHEN_THE_EXP_HAD_STOPPED \
+    --memory-size 20000
 ```
 
 # Results
@@ -118,7 +121,20 @@ bash train.sh 0,1 \
 
 > What is this finetuning phase?
 
-- New classes data is downsampled to the same amount of old classes data stored in the rehearsal memory. And the encoder is frozen. You can see which modules are frozen in which task in the [options files](https://github.com/arthurdouillard/dytox/blob/main/options/model/cifar_dytox.yaml#L35-L36). 
+- New classes data is downsampled to the same amount of old classes data stored in the rehearsal memory. And the encoder is frozen. You can see which modules are frozen in which task in the [options files](https://github.com/arthurdouillard/dytox/blob/main/options/model/cifar_dytox.yaml#L35-L36).
+
+> Memory setting?
+
+- If you use distributed memory (default), use 20/N images per class with N the number of used GPUs. Thus for 2 GPUs, it's `--memory-size 1000` for CIFAR100 and ImageNet100 and `--memory-size 10000` for Imagenet1000. If you use global memory (`--global-memory`), use 20 images per class.
+
+> Distributed memory?
+
+- See [here](erratum_distributed.md).
+
+> Results obtained on >=2 GPUs are slightly different from the first version of the paper?
+
+- See [here](erratum_distributed.md).
+
 
 
 # Citation
