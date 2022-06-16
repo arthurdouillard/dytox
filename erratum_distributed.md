@@ -28,7 +28,7 @@ That said, we believe that this Distributed Memory have merits.
 
 It results in a direct gain of performance on CIFAR:
 
-[global vs distributed](images/cifar_global_vs_distributed.png)
+![global vs distributed](images/cifar_global_vs_distributed.png)
 
 # Results
 
@@ -43,13 +43,13 @@ Gray color symbolizes results presented in the original paper.
 
 CIFAR experiments were run on 2 GPUs. All are with distributed memory.
 
-[results on cifar100](images/erratum_cifar.png)
+![results on cifar100](images/erratum_cifar.png)
 
 ## ImageNet
 
 ImageNet experiments in global memory were run with 8 GPUs, and with distributed memory with 4 GPUs (thus only 5 images/class/gpu which probably explains here the slightly lower results compared to global memory).
 
-[results on ImageNet](images/erratum_imagenet.png)
+![results on ImageNet](images/erratum_imagenet.png)
 
 # 1 GPU
 
