@@ -29,6 +29,7 @@ auto_kd: true
 # Finetuning
 finetuning: balanced
 finetuning_epochs: 20
+ft_no_sampling: true
 
 # Dytox model
 dytox: true

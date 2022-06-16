@@ -7,14 +7,17 @@ model: convit
 embed_dim: 384
 depth: 6
 num_heads: 12
-patch_size: 4
-input_size: 32
+patch_size: 16
+input_size: 224
 local_up_to_layer: 5
 class_attention: true
 
+#batch_size: 64
+#incremental_batch_size: 64
+
 # Training setting
-no_amp: true
-eval_every: 50
+no_amp: false
+eval_every: 250
 
 # Base hyperparameter
 weight_decay: 0.000001
@@ -54,5 +57,5 @@ recount: 1
 resplit: false
 
 ## MixUp & CutMix
-mixup: 0.0
+mixup: 0.8
 cutmix: 0.0
